@@ -129,7 +129,7 @@ on your machine). The default is set for the demo author — change
 this to **your actual macOS username** if you're running the lab
 yourself:
 
-::variableSetButton[Use default username)]{variables="username=ajeetraina"}
+::variableSetButton[Use default username]{variables="username=ajeetraina"}
 
 &nbsp;
 
