@@ -1,13 +1,10 @@
 # The Blast Radius Test
 
 Blast radius is a security concept borrowed from operations engineering: when something goes wrong, how far does the damage spread? 
-A single compromised credential that exposes one service has a small blast radius. A root-level script that runs across a fleet of machines has a large one. The discipline of running production systems safely is, in large part, the discipline of keeping blast radius small.
 
-AI agents change the math. An agent given host-level access to a developer's laptop has the same blast radius as the developer — every file, every credential, every connected system. Docker Sandboxes (sbx) shrinks that blast radius back to a workspace boundary. Each agent runs inside a microVM with its own kernel, its own filesystem, and a single explicitly-mounted directory. Even if the agent gets jailbroken or prompt-injected, the damage stops at the VM wall.
+An agent given host-level access to a developer's laptop has the same blast radius as the developer — every file, every credential, every connected system. 
 
-> *"Speed without governance creates liability. Governance without
-> speed creates drag."*
-> — Deloitte, State of AI in the Enterprise 2026
+Docker Sandboxes (sbx) shrinks that blast radius back to a workspace boundary. Each agent runs inside a microVM with its own kernel, its own filesystem, and a single explicitly-mounted directory. Even if the agent gets jailbroken or prompt-injected, the damage stops at the VM wall.
 
 In this lab you'll prove it. You'll meet sbx, ask your chosen coding agent to refuse a catastrophic command, then drop into a raw shell inside the same sandbox and watch it try — and fail — to reach files on your host. The single clearest demonstration of why containers alone aren't enough, and why model alignment alone isn't enough either. You need both, working together.
 
