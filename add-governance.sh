@@ -1,39 +1,204 @@
-## 🚀 Before you start — set your Docker Hub Org
+#!/usr/bin/env bash
+# add-governance-chapter.sh
+#
+# Adds an "Organization Governance" chapter to your existing
+# ajeetraina/labspace-sbx-blastradius repo.
+#
+# Fixes in this revision:
+#   - Deep-link buttons are now LIVE even before the org is set: they
+#     default to https://app.docker.com/admin (which resolves to whatever
+#     org the user has chosen in the console). JS upgrades them to
+#     org-specific deep-links when an org slug is set. This works even if
+#     the labspace renderer doesn't run inline <script> blocks.
+#   - Removed the bogus `-g` flag from `sbx policy rm/allow` commands —
+#     current `sbx` builds reject `unknown shorthand flag: 'g' in -g`.
+#     Correct form is `sbx policy rm network --resource <domain>`.
+#   - Optional --no-tmux flag: skips patching start-labspace.sh. By default
+#     the script patches it so ttyd launches into a tmux session with two
+#     pre-named windows (host + sandbox). The reader sees them as tabs at
+#     the bottom of the ttyd pane and switches with Ctrl-b 0 / Ctrl-b 1.
+#     Use --no-tmux if you'd rather keep the bare-shell behaviour.
+#
+# Usage:
+#   ./add-governance-chapter.sh                        # full flow with push + PR
+#   ./add-governance-chapter.sh --no-push              # local commit only
+#   ./add-governance-chapter.sh --no-pr                # push but skip PR
+#   ./add-governance-chapter.sh --dir ./blastradius    # use existing clone
+#   ./add-governance-chapter.sh --branch feat/gov-v2   # custom branch name
+#   ./add-governance-chapter.sh --no-tmux              # skip start-labspace.sh patch
+#
+# Re-runnable: existing files are overwritten; yaml is only patched if
+# the section isn't already registered.
 
-This chapter walks you through three Admin Console pages. Set your Docker Hub org slug once below, then the step buttons will deep-link to your org's pages.
+set -euo pipefail
 
-::variableDefinition[org]{prompt="Enter your Docker Hub org slug (e.g. dockerdevrel)"}
+# ---- Defaults ----------------------------------------------------------------
+OWNER="ajeetraina"
+REPO="labspace-sbx-blastradius"
+DIR=""
+BRANCH="feat/governance-chapter"
+DO_PUSH=1
+DO_PR=1
+WITH_TMUX=1
 
-:::conditionalDisplay{variable="org" hasNoValue}
-> [!IMPORTANT]
-> Set your Docker Hub org above before clicking the step buttons below.
-:::
+# ---- Arg parsing -------------------------------------------------------------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --owner)      OWNER="$2"; shift 2 ;;
+    --repo)       REPO="$2"; shift 2 ;;
+    --dir)        DIR="$2"; shift 2 ;;
+    --branch)     BRANCH="$2"; shift 2 ;;
+    --no-push)    DO_PUSH=0; DO_PR=0; shift ;;
+    --no-pr)      DO_PR=0; shift ;;
+    --no-tmux)    WITH_TMUX=0; shift ;;
+    -h|--help)    sed -n '2,32p' "$0"; exit 0 ;;
+    *)            echo "Unknown flag: $1" >&2; exit 1 ;;
+  esac
+done
 
-:::conditionalDisplay{variable="org" hasValue}
+DIR="${DIR:-$REPO}"
+CHAPTER_FILE="labspace/02-governance.md"
+YAML_FILE="labspace/labspace.yaml"
+START_SCRIPT="start-labspace.sh"
 
-### Step 1 — Enable AI Governance
+# ---- Output helpers ----------------------------------------------------------
+GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; NC='\033[0m'
+info()  { printf "${GREEN}==>${NC} %s\n" "$*"; }
+warn()  { printf "${YELLOW}!! ${NC} %s\n" "$*"; }
+fatal() { printf "${RED}xx ${NC} %s\n" "$*" >&2; exit 1; }
 
-The master switch. Open **AI governance → Manage** and toggle **AI governance** on. Until this is on, the Filesystem and Network pages refuse to accept rules.
+# ---- Preflight ---------------------------------------------------------------
+command -v git >/dev/null 2>&1 || fatal "git is required."
 
-[⚙️ Enable AI Governance for `$$org$$` →](https://app.docker.com/accounts/$$org$$/admin/ai-governance/manage)
+# ---- Clone or reuse ----------------------------------------------------------
+if [[ -d "$DIR/.git" ]]; then
+  info "Using existing clone at $DIR"
+  cd "$DIR"
+elif [[ -e "$DIR" ]]; then
+  fatal "Directory '$DIR' exists but isn't a git repo. Remove it or pass --dir."
+else
+  info "Cloning ${OWNER}/${REPO} into $DIR/"
+  git clone "https://github.com/${OWNER}/${REPO}.git" "$DIR"
+  cd "$DIR"
+fi
 
----
+# ---- Sanity-check ------------------------------------------------------------
+[[ -f "labspace/01-blast-radius-test.md" ]] || fatal "labspace/01-blast-radius-test.md not found — is this the right repo?"
+[[ -f "$YAML_FILE" ]] || fatal "$YAML_FILE not found — is this the right repo?"
 
-### Step 2 — Configure Filesystem access
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  fatal "Working tree has uncommitted changes. Stash or commit them first."
+fi
 
-Open **AI governance → Filesystem access** and add allow / deny rules for which host paths sandboxes can mount. We'll walk through example rules in the Filesystem section below.
+info "Fetching latest"
+git fetch origin --quiet
 
-[📂 Configure Filesystem for `$$org$$` →](https://app.docker.com/accounts/$$org$$/admin/ai-governance/filesystem-access)
+DEFAULT_BRANCH=$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p' | head -1)
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
+git checkout -q "$DEFAULT_BRANCH"
+git pull -q --ff-only origin "$DEFAULT_BRANCH" 2>/dev/null || warn "Could not fast-forward $DEFAULT_BRANCH (continuing)"
 
----
+if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+  info "Branch $BRANCH already exists — switching to it"
+  git checkout -q "$BRANCH"
+else
+  info "Creating branch $BRANCH"
+  git checkout -q -b "$BRANCH"
+fi
 
-### Step 3 — Configure Network access
+# ---- Write the chapter -------------------------------------------------------
+info "Writing $CHAPTER_FILE"
+cat > "$CHAPTER_FILE" <<'CHAPTER_EOF'
+<!--
+  Three-step stepper at the top of the chapter, matching the actual
+  Admin Console workflow:
 
-Open **AI governance → Network access** and add allow / deny rules for which domains sandboxes can reach. We'll walk through example rules in the Network section below.
+    Step 1 → enable AI governance (the master toggle)
+    Step 2 → configure Filesystem access rules
+    Step 3 → configure Network access rules
 
-[🛜 Configure Network for `$$org$$` →](https://app.docker.com/accounts/$$org$$/admin/ai-governance/network-access)
+  Each step's button opens the Docker Admin Console in a new tab; the
+  attendee's session there determines the org automatically (no need
+  to template URLs for each attendee, no JS, no form, no helper page).
+  Step prose tells them which sidebar item to click once they land.
 
-:::
+  Why this design: the labspace markdown renderer strips inline
+  <script> tags as an XSS defense, so anything interactive needs to
+  be plain HTML. Plain anchor links + visual stepping == bulletproof.
+-->
+<style>
+  .gov-steps {
+    margin: 0 0 24px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .gov-step {
+    display: flex; align-items: flex-start; gap: 14px;
+    border: 1px solid #d0d7de; border-radius: 8px;
+    padding: 14px 18px; margin: 0 0 10px 0;
+    background: #ffffff;
+  }
+  .gov-step__num {
+    flex-shrink: 0;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: #1f6feb; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 14px;
+  }
+  .gov-step__body { flex: 1; min-width: 0; }
+  .gov-step__title { font-weight: 600; color: #1f2328; font-size: 15px; margin: 4px 0 4px 0; }
+  .gov-step__desc { color: #57606a; font-size: 13px; line-height: 1.5; margin: 0 0 10px 0; }
+  .gov-step__desc strong { color: #1f2328; }
+  .gov-step__btn {
+    display: inline-block;
+    padding: 6px 14px;
+    border: 1px solid #1f6feb;
+    background: #1f6feb;
+    color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .gov-step__btn:hover { background: #1a5fd1; }
+</style>
+
+<div class="gov-steps">
+
+  <div class="gov-step">
+    <div class="gov-step__num">1</div>
+    <div class="gov-step__body">
+      <div class="gov-step__title">Enable AI Governance</div>
+      <div class="gov-step__desc">
+        Open the Admin Console, then in the left sidebar go to <strong>AI governance → Manage</strong> and toggle <strong>AI governance</strong> on. This is the master switch — until it's on, the Filesystem and Network pages refuse to accept rules.
+      </div>
+      <a class="gov-step__btn" href="https://app.docker.com/admin" target="_blank" rel="noopener">⚙️ Open Admin Console</a>
+    </div>
+  </div>
+
+  <div class="gov-step">
+    <div class="gov-step__num">2</div>
+    <div class="gov-step__body">
+      <div class="gov-step__title">Configure Filesystem access</div>
+      <div class="gov-step__desc">
+        In the same Admin Console tab, go to <strong>AI governance → Filesystem access</strong>. Add allow / deny rules for which host paths sandboxes can mount. We'll walk through example rules in Step 6 below.
+      </div>
+      <a class="gov-step__btn" href="https://app.docker.com/admin" target="_blank" rel="noopener">📂 Open Admin Console</a>
+    </div>
+  </div>
+
+  <div class="gov-step">
+    <div class="gov-step__num">3</div>
+    <div class="gov-step__body">
+      <div class="gov-step__title">Configure Network access</div>
+      <div class="gov-step__desc">
+        In the same Admin Console tab, go to <strong>AI governance → Network access</strong>. Add allow / deny rules for which domains sandboxes can reach. We'll walk through example rules in Step 2–5 below.
+      </div>
+      <a class="gov-step__btn" href="https://app.docker.com/admin" target="_blank" rel="noopener">🛜 Open Admin Console</a>
+    </div>
+  </div>
+
+</div>
 
 # Organization Governance
 
@@ -532,3 +697,194 @@ makes "the same thing, applied uniformly" possible.
 ---
 
 *Chapter authored as a follow-on to the Blast Radius Test.*
+CHAPTER_EOF
+
+# ---- Patch labspace.yaml -----------------------------------------------------
+if grep -q "contentPath: 02-governance.md" "$YAML_FILE"; then
+  info "labspace.yaml already has the governance section — leaving as-is"
+else
+  info "Patching $YAML_FILE to register the new section"
+  cat >> "$YAML_FILE" <<'YAML_EOF'
+  - title: "Organization Governance"
+    contentPath: 02-governance.md
+    duration: 20
+YAML_EOF
+fi
+
+# ---- Optionally patch start-labspace.sh for tmux multi-terminal --------------
+if [[ $WITH_TMUX -eq 1 ]]; then
+  if [[ ! -f "$START_SCRIPT" ]]; then
+    warn "$START_SCRIPT not found — skipping tmux patch"
+  elif grep -q "labspace-tmux-launcher" "$START_SCRIPT"; then
+    info "$START_SCRIPT already patched for tmux — leaving as-is"
+  else
+    info "Patching $START_SCRIPT for tmux multi-terminal"
+    # Insert tmux-launcher writeout right before the ttyd launch line,
+    # then swap `zsh` for the launcher.
+    python3 - "$START_SCRIPT" <<'PYEOF'
+import sys, re, pathlib
+p = pathlib.Path(sys.argv[1])
+src = p.read_text()
+
+launcher_block = r"""
+# ── Tmux launcher (added for multi-terminal support) ───────────
+# Writes a launcher script that ttyd will exec. The launcher attaches
+# to (or creates) a tmux session with two pre-named windows so the
+# reader sees 'host' and 'sandbox' tabs at the bottom of the ttyd pane.
+# tmux is verified above in the preflight check.
+LAUNCHER="$(mktemp -t labspace-tmux-launcher.XXXXXX.sh)"
+chmod +x "$LAUNCHER"
+cat > "$LAUNCHER" <<'LAUNCHER_EOF'
+#!/usr/bin/env bash
+SESSION="labspace"
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session  -d -s "$SESSION" -n host    "${SHELL:-zsh} -l"
+  tmux new-window      -t "$SESSION:" -n sandbox "${SHELL:-zsh} -l"
+  tmux select-window   -t "$SESSION:host"
+fi
+exec tmux attach -t "$SESSION"
+LAUNCHER_EOF
+trap 'rm -f "$LAUNCHER"' EXIT
+
+"""
+
+# Insert the launcher block right before the "ttyd" launch line.
+# Use a callable replacement to sidestep backslash-escaping in re.sub's
+# replacement template — passing literal quotes through `\1...\2` ends up
+# double-escaped in bash and breaks the launch.
+def _replace(m):
+    return launcher_block.lstrip() + m.group(1) + '"$LAUNCHER"' + m.group(2)
+src = re.sub(
+    r"(ttyd -p \$TTYD_PORT --writable --max-clients 4 )zsh( &)",
+    _replace,
+    src,
+    count=1,
+)
+
+# Add a tmux preflight check immediately after the ttyd check, matching the
+# same format as the existing ttyd and sbx checks.
+tmux_check = '''
+# ── 1b. Check tmux ─────────────────────────────────────────────
+if ! command -v tmux &>/dev/null; then
+  echo ""
+  echo -e "${RED}ERROR: tmux not found.${NC}"
+  echo ""
+  echo "  This labspace uses tmux to give you two terminals (host + sandbox)"
+  echo "  as tabs at the bottom of the ttyd pane."
+  echo ""
+  echo "  Install it with:"
+  echo "    brew install tmux          # macOS"
+  echo "    sudo apt install tmux      # Ubuntu/Debian"
+  echo ""
+  echo "  Then re-run: bash start-labspace.sh"
+  exit 1
+fi
+
+'''
+# Insert immediately after the closing 'fi' of the ttyd check (the first
+# blank line after '# ── 1. Check ttyd ──...').
+src = re.sub(
+    r"(# ── 1\. Check ttyd ─.*?\nfi\n)\n",
+    r"\1" + tmux_check,
+    src,
+    count=1,
+    flags=re.DOTALL,
+)
+p.write_text(src)
+PYEOF
+  fi
+fi
+
+# ---- Commit ------------------------------------------------------------------
+git add "$CHAPTER_FILE" "$YAML_FILE"
+[[ $WITH_TMUX -eq 1 && -f "$START_SCRIPT" ]] && git add "$START_SCRIPT"
+
+if git diff --cached --quiet; then
+  warn "No changes to commit (files already match)."
+else
+  info "Committing"
+  COMMIT_MSG="Add Organization Governance chapter"
+  [[ $WITH_TMUX -eq 1 ]] && COMMIT_MSG="$COMMIT_MSG + host/sandbox tmux tabs"
+  git commit -q -m "$COMMIT_MSG
+
+New chapter labspace/02-governance.md walks through Docker's AI governance
+controls in the Admin Console:
+
+- Set Docker Hub Org form at the top of the page (persists to localStorage)
+- Top tab/link bar deep-linking into Manage / Network access /
+  Filesystem access for the configured org; links work even before an
+  org is set (default to /admin so the console resolves the org)
+- Enable AI governance + add org-level network rules
+- Demonstrate inactive local rules under corporate policy
+- Toggle User defined to delegate rule types back to local control
+- Confirm org-level denies still beat delegated local allows
+- Filesystem rules with the ** vs * wildcard gotcha
+- Precedence cheat sheet and sbx policy reset for forced propagation
+
+Multi-terminal: start-labspace.sh is patched so ttyd launches into a
+tmux session with two pre-named windows (host + sandbox). The reader
+sees them as tabs at the bottom of the ttyd pane and switches with
+Ctrl-b 0 / Ctrl-b 1. A tmux preflight check is added alongside the
+existing ttyd and sbx checks.
+
+CLI commands use the current 'sbx policy ... --resource <domain>' form
+(the earlier '-g' shorthand is no longer accepted by sbx).
+
+Follows the same surface labels (🖥 Host / 🌐 Admin Console / 📦 Sandbox
+shell) and code-fence directives (bash no-run-button, plaintext
+no-copy-button) as 01-blast-radius-test.md."
+fi
+
+# ---- Push / PR ---------------------------------------------------------------
+if [[ $DO_PUSH -eq 1 ]]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    warn "gh CLI not found — skipping push."
+    warn "To push manually:"
+    warn "  cd $(pwd)"
+    warn "  git push -u origin $BRANCH"
+  elif ! gh auth status >/dev/null 2>&1; then
+    warn "gh CLI is not authenticated. Run 'gh auth login' and then:"
+    warn "  cd $(pwd)"
+    warn "  git push -u origin $BRANCH"
+  else
+    info "Pushing $BRANCH"
+    git push -u origin "$BRANCH"
+    if [[ $DO_PR -eq 1 ]]; then
+      info "Opening pull request"
+      gh pr create \
+        --base "$DEFAULT_BRANCH" \
+        --head "$BRANCH" \
+        --title "Add Organization Governance chapter" \
+        --body "Adds a second chapter to the labspace covering Docker's AI governance controls (Admin Console → AI governance → Network / Filesystem access).
+
+**What's new**
+- \`labspace/02-governance.md\` with the full walkthrough
+- A \"Set Docker Hub Org\" form at the top of the page (persists to localStorage)
+- A top tab/link bar with three deep-link buttons (Manage / Network / Filesystem). Buttons work even before an org is set — they default to \`/admin\` and the console handles org selection. Once a slug is entered, the JS upgrades them to org-specific deep-links.
+- New section registered in \`labspace/labspace.yaml\`
+
+**Bug fixes vs the earlier draft**
+- \`sbx policy rm/allow\` commands no longer use the \`-g\` shorthand (current sbx builds reject it as \`unknown shorthand flag\`)
+- Deep-link buttons no longer rely on JS having run successfully — they're live by default
+
+**Conventions**
+Follows the same surface labels (🖥 Host / 🌐 Admin Console / 📦 Sandbox shell) and code-fence directives (\`bash no-run-button\`, \`plaintext no-copy-button\`) as \`01-blast-radius-test.md\`.
+
+**Test**
+Run \`bash start-labspace.sh\` and open http://localhost:3030 — the new chapter appears under the Blast Radius Test." \
+        || warn "gh pr create failed (PR may already exist for this branch)"
+    fi
+  fi
+else
+  info "Skipping push (--no-push)."
+  info "To push later:"
+  info "  cd $(pwd)"
+  info "  git push -u origin $BRANCH"
+fi
+
+echo
+info "Done."
+echo "  Branch:       $BRANCH"
+echo "  Chapter file: $(pwd)/$CHAPTER_FILE"
+[[ $WITH_TMUX -eq 1 ]] && echo "  Tmux:         $START_SCRIPT patched for host/sandbox tabs (requires tmux on the host)"
+echo "  Test locally: cd $(pwd) && bash start-labspace.sh   # then http://localhost:3030"
