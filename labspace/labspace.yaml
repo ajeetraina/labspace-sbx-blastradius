@@ -13,3 +13,6 @@ sections:
   - title: "The Blast Radius Test"
     contentPath: 01-blast-radius-test.md
     duration: 15
+  - title: "Organization Governance"
+    contentPath: 02-governance.md
+    duration: 20
