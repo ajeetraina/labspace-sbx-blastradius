@@ -1,11 +1,15 @@
 <!--
-  AI Governance Setup Bar
+  AI Governance setup bar
   =======================
-  A small HTML widget at the top of the chapter that does two things:
-  1. Asks the reader to set their Docker Hub Org slug (persisted to localStorage).
-  2. Provides quick-jump links into the Admin Console's AI governance subpages
-     for that org. Links stay disabled until the org slug is set.
-  All vanilla HTML / CSS / JS, no frameworks.
+  Top-of-chapter widget with two parts:
+  1. A "Set Docker Hub Org" form that remembers the org slug in localStorage.
+  2. Three quick-jump links into the Admin Console's AI governance subpages.
+
+  Important: the links are LIVE by default. Even before an org is set
+  (or if the labspace renderer doesn't execute the inline <script>), the
+  three links point at https://app.docker.com/admin — which resolves to
+  whichever org the user has selected in the Admin Console. The JS only
+  *upgrades* them to org-specific deep-links when a slug is set.
 -->
 <style>
   .gov-bar {
@@ -24,11 +28,7 @@
     gap: 8px;
   }
   .gov-bar__row + .gov-bar__row { margin-top: 10px; }
-  .gov-bar__label {
-    font-weight: 600;
-    color: #1f2328;
-    margin-right: 4px;
-  }
+  .gov-bar__label { font-weight: 600; color: #1f2328; margin-right: 4px; }
   .gov-bar input[type="text"] {
     padding: 5px 10px;
     border: 1px solid #d0d7de;
@@ -56,11 +56,7 @@
     text-decoration: underline;
     font-size: 13px;
   }
-  .gov-bar__links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
+  .gov-bar__links { display: flex; flex-wrap: wrap; gap: 14px; }
   .gov-bar__links a {
     text-decoration: none;
     padding: 4px 10px;
@@ -71,17 +67,11 @@
     font-weight: 500;
   }
   .gov-bar__links a:hover { background: #eaf2ff; }
-  .gov-bar__links a.disabled {
-    color: #8c959f;
-    background: #f0f1f2;
-    border-color: #e6e8eb;
-    pointer-events: none;
-    cursor: not-allowed;
+  .gov-bar__links a.is-deep-link {
+    background: #eaf2ff;
+    border-color: #b6daff;
   }
-  .gov-bar__status {
-    color: #57606a;
-    font-size: 13px;
-  }
+  .gov-bar__status { color: #57606a; font-size: 13px; }
   .gov-bar__status.error { color: #cf222e; }
   .gov-bar__status.ok    { color: #1a7f37; }
 </style>
@@ -91,7 +81,7 @@
     <span class="gov-bar__label">🏢 Docker Hub Org:</span>
     <input type="text" id="gov-bar-input" placeholder="e.g. dockerdevrel" autocomplete="off" spellcheck="false" />
     <button id="gov-bar-set">Set org</button>
-    <span class="gov-bar__status" id="gov-bar-status">Set your org before enabling AI governance.</span>
+    <span class="gov-bar__status" id="gov-bar-status">Optional: pre-set the org for deep-links. You can also click the buttons below now and pick the org inside the console.</span>
   </div>
   <div class="gov-bar__row" id="gov-bar-summary-row" style="display:none;">
     <span class="gov-bar__label">🏢 Org:</span>
@@ -99,27 +89,31 @@
     <button class="gov-bar__change" id="gov-bar-change">change</button>
   </div>
   <div class="gov-bar__row gov-bar__links">
-    <a id="gov-link-manage"     href="#" class="disabled" target="_blank" rel="noopener">⚙️  Manage AI governance</a>
-    <a id="gov-link-network"    href="#" class="disabled" target="_blank" rel="noopener">🛜 Network access</a>
-    <a id="gov-link-filesystem" href="#" class="disabled" target="_blank" rel="noopener">📂 Filesystem access</a>
+    <a id="gov-link-manage"     href="https://app.docker.com/admin" target="_blank" rel="noopener">⚙️  Manage AI governance</a>
+    <a id="gov-link-network"    href="https://app.docker.com/admin" target="_blank" rel="noopener">🛜 Network access</a>
+    <a id="gov-link-filesystem" href="https://app.docker.com/admin" target="_blank" rel="noopener">📂 Filesystem access</a>
   </div>
 </div>
 
 <script>
 (function () {
   var STORAGE_KEY = 'labspace.sbx.governance.org';
-  var SLUG_RE = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;  // Docker Hub org rules
+  var SLUG_RE = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
-  var input       = document.getElementById('gov-bar-input');
-  var setBtn      = document.getElementById('gov-bar-set');
-  var changeBtn   = document.getElementById('gov-bar-change');
-  var status      = document.getElementById('gov-bar-status');
-  var inputRow    = document.getElementById('gov-bar-input-row');
-  var summaryRow  = document.getElementById('gov-bar-summary-row');
-  var current     = document.getElementById('gov-bar-current');
-  var linkManage  = document.getElementById('gov-link-manage');
-  var linkNet     = document.getElementById('gov-link-network');
-  var linkFs      = document.getElementById('gov-link-filesystem');
+  function $(id) { return document.getElementById(id); }
+  var input      = $('gov-bar-input');
+  var setBtn     = $('gov-bar-set');
+  var changeBtn  = $('gov-bar-change');
+  var status     = $('gov-bar-status');
+  var inputRow   = $('gov-bar-input-row');
+  var summaryRow = $('gov-bar-summary-row');
+  var current    = $('gov-bar-current');
+  var links = {
+    manage:     $('gov-link-manage'),
+    network:    $('gov-link-network'),
+    filesystem: $('gov-link-filesystem')
+  };
+  if (!input || !setBtn) return; // renderer didn't keep the DOM, nothing to wire
 
   function urlFor(org, sub) {
     return 'https://app.docker.com/admin/' + encodeURIComponent(org) + '/ai-governance/' + sub;
@@ -129,20 +123,20 @@
     inputRow.style.display = 'none';
     summaryRow.style.display = 'flex';
     current.textContent = org;
-    linkManage.href = urlFor(org, 'manage');
-    linkNet.href    = urlFor(org, 'network-access');
-    linkFs.href     = urlFor(org, 'filesystem-access');
-    [linkManage, linkNet, linkFs].forEach(function (a) { a.classList.remove('disabled'); });
+    links.manage.href     = urlFor(org, 'manage');
+    links.network.href    = urlFor(org, 'network-access');
+    links.filesystem.href = urlFor(org, 'filesystem-access');
+    Object.keys(links).forEach(function (k) { links[k].classList.add('is-deep-link'); });
   }
 
   function deactivate() {
     inputRow.style.display = 'flex';
     summaryRow.style.display = 'none';
     status.className = 'gov-bar__status';
-    status.textContent = 'Set your org before enabling AI governance.';
-    [linkManage, linkNet, linkFs].forEach(function (a) {
-      a.classList.add('disabled');
-      a.href = '#';
+    status.textContent = 'Optional: pre-set the org for deep-links. You can also click the buttons below now and pick the org inside the console.';
+    Object.keys(links).forEach(function (k) {
+      links[k].href = 'https://app.docker.com/admin';
+      links[k].classList.remove('is-deep-link');
     });
   }
 
@@ -158,20 +152,21 @@
       status.textContent = 'That doesn\u2019t look like a valid Docker Hub org slug (3\u201340 chars, lowercase letters, digits, hyphens; can\u2019t start or end with hyphen).';
       return;
     }
-    try { localStorage.setItem(STORAGE_KEY, org); } catch (e) { /* private mode */ }
+    try { localStorage.setItem(STORAGE_KEY, org); } catch (e) {}
     activate(org);
   }
 
   setBtn.addEventListener('click', commit);
   input.addEventListener('keydown', function (e) { if (e.key === 'Enter') commit(); });
-  changeBtn.addEventListener('click', function () {
-    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-    input.value = '';
-    deactivate();
-    input.focus();
-  });
+  if (changeBtn) {
+    changeBtn.addEventListener('click', function () {
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+      input.value = '';
+      deactivate();
+      input.focus();
+    });
+  }
 
-  // Restore on load if previously set
   var saved = null;
   try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
   if (saved && SLUG_RE.test(saved)) {
@@ -202,13 +197,14 @@ rule go **inactive** because corporate policy doesn't delegate it,
 then turn on delegation and watch the same rule come back **active** —
 while the org-level deny still blocks the things it's meant to block.
 
-> **Set your Docker Hub Org first**
+> **About the buttons at the top**
 >
-> Use the input at the top of this chapter to enter your Docker Hub
-> org slug (e.g. `dockerdevrel`). The three quick-jump links above
-> will deep-link straight into your org's Admin Console pages for
-> Manage, Network access, and Filesystem access. The slug is saved
-> in your browser so you only set it once.
+> The three buttons (⚙️ Manage, 🛜 Network access, 📂 Filesystem
+> access) work right now — they take you to the Admin Console and
+> the org switcher in the top-left handles the rest. If you want
+> them to deep-link straight into a specific org's pages, type the
+> org slug into the **Docker Hub Org** input and click **Set org**.
+> The slug is saved in your browser so you only set it once.
 
 > **Note**
 >
@@ -225,13 +221,22 @@ while the org-level deny still blocks the things it's meant to block.
 | Label | Surface | Looks like |
 |---|---|---|
 | **🖥 Host** | Your Mac terminal (the right pane) | `you@your-mac %` |
-| **🌐 Admin Console** | Browser, opened via the links at the top | A web UI, not a terminal |
+| **🌐 Admin Console** | Browser, opened via the buttons at the top | A web UI, not a terminal |
 | **📦 Sandbox shell** | A raw bash shell inside the sandbox | `agent@sbxlab:~/workspace$` |
 
-One new surface this chapter: the **Admin Console**. Most of the
-configuration happens there. The terminal still matters — that's
-where you verify each policy change actually landed on the
-developer's machine.
+> **Tip — two terminals at once**
+>
+> This chapter has you bouncing between the host shell and the
+> sandbox shell. If you'd rather see both at the same time, split
+> the terminal pane:
+>
+> - **tmux split** — inside the terminal, press <kbd>Ctrl</kbd>+<kbd>b</kbd>
+>   then <kbd>"</kbd> for a horizontal split (or <kbd>%</kbd> for
+>   vertical). Switch panes with <kbd>Ctrl</kbd>+<kbd>b</kbd>
+>   <kbd>o</kbd>.
+> - **Two windows** — if the labspace was started with the multi-terminal
+>   patch, the bottom of the terminal shows two tabs: `host` and `sandbox`.
+>   Switch with <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>0</kbd> / <kbd>1</kbd>.
 
 ---
 
@@ -277,16 +282,15 @@ sbx login
 Clear any leftover local policy from Chapter 1 so we start clean:
 
 ```bash no-run-button
-sbx policy rm network -g --resource example.com
-sbx policy rm network -g --resource api.example.com
+sbx policy rm network --resource example.com
+sbx policy rm network --resource api.example.com
 ```
 
 Either may return `rule not found` — that's fine.
 
 🌐 **Admin Console** — click **⚙️ Manage AI governance** in the bar
-at the top of this page. (If the link is disabled, set your org
-slug first.) Keep the Admin Console tab open; you'll bounce between
-it and the terminal throughout the chapter.
+at the top of this page. Keep the Admin Console tab open; you'll
+bounce between it and the terminal throughout the chapter.
 
 ---
 
@@ -398,7 +402,7 @@ when the developer tries to fix it themselves.
 🖥 **Host** — back on the Mac, *not* in the sandbox:
 
 ```bash no-run-button
-sbx policy allow network -g example.com
+sbx policy allow network --resource example.com
 sbx policy ls
 ```
 
@@ -498,7 +502,7 @@ local *allow*.
 deny rule the org set:
 
 ```bash no-run-button
-sbx policy allow network -g build.corp.internal
+sbx policy allow network --resource build.corp.internal
 ```
 
 The CLI accepts it. The rule shows up `local`, `active`, `allow`.
@@ -520,7 +524,7 @@ catch-all rule, the CLI blocks catch-all patterns in delegated
 local rules. 🖥 **Host**:
 
 ```bash no-run-button
-sbx policy allow network -g "*.com"
+sbx policy allow network --resource "*.com"
 ```
 
 You'll get an error immediately. The blocklist covers `*`, `**`,
