@@ -87,7 +87,7 @@
     <span class="gov-bar__label">🏢 Docker Hub Org:</span>
     <input type="text" id="gov-bar-input" placeholder="e.g. dockerdevrel" autocomplete="off" spellcheck="false" />
     <button id="gov-bar-set">Set org</button>
-    <span class="gov-bar__status" id="gov-bar-status">Set your org slug to enable the buttons below.</span>
+    <span class="gov-bar__status" id="gov-bar-status"></span>
   </div>
   <div class="gov-bar__row" id="gov-bar-summary-row" style="display:none;">
     <span class="gov-bar__label">🏢 Org:</span>
@@ -145,7 +145,7 @@
     inputRow.style.display = 'flex';
     summaryRow.style.display = 'none';
     status.className = 'gov-bar__status';
-    status.textContent = 'Set your org slug to enable the buttons below.';
+    status.textContent = '';
     Object.keys(links).forEach(function (k) {
       links[k].href = 'https://app.docker.com/admin';
       links[k].classList.remove('is-deep-link');
