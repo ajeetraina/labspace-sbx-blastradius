@@ -40,6 +40,22 @@ if ! command -v ttyd &>/dev/null; then
   exit 1
 fi
 
+# ── 1b. Check tmux ─────────────────────────────────────────────
+if ! command -v tmux &>/dev/null; then
+  echo ""
+  echo -e "${RED}ERROR: tmux not found.${NC}"
+  echo ""
+  echo "  This labspace uses tmux to give you two terminals (host + sandbox)"
+  echo "  as tabs at the bottom of the ttyd pane."
+  echo ""
+  echo "  Install it with:"
+  echo "    brew install tmux          # macOS"
+  echo "    sudo apt install tmux      # Ubuntu/Debian"
+  echo ""
+  echo "  Then re-run: bash start-labspace.sh"
+  exit 1
+fi
+
 # ── 2. Check sbx ───────────────────────────────────────────────
 if ! command -v sbx &>/dev/null; then
   echo ""
@@ -83,7 +99,26 @@ sleep 1
 
 # ── 6. Start ttyd ──────────────────────────────────────────────
 info "Starting terminal on port $TTYD_PORT..."
-ttyd -p $TTYD_PORT --writable --max-clients 4 zsh &
+# ── Tmux launcher (added for multi-terminal support) ───────────
+# Writes a launcher script that ttyd will exec. The launcher attaches
+# to (or creates) a tmux session with two pre-named windows so the
+# reader sees 'host' and 'sandbox' tabs at the bottom of the ttyd pane.
+# tmux is verified above in the preflight check.
+LAUNCHER="$(mktemp -t labspace-tmux-launcher.XXXXXX.sh)"
+chmod +x "$LAUNCHER"
+cat > "$LAUNCHER" <<'LAUNCHER_EOF'
+#!/usr/bin/env bash
+SESSION="labspace"
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session  -d -s "$SESSION" -n host    "${SHELL:-zsh} -l"
+  tmux new-window      -t "$SESSION:" -n sandbox "${SHELL:-zsh} -l"
+  tmux select-window   -t "$SESSION:host"
+fi
+exec tmux attach -t "$SESSION"
+LAUNCHER_EOF
+trap 'rm -f "$LAUNCHER"' EXIT
+
+ttyd -p $TTYD_PORT --writable --max-clients 4 "$LAUNCHER" &
 TTYD_PID=$!
 sleep 1
 
