@@ -71,6 +71,12 @@
     background: #eaf2ff;
     border-color: #b6daff;
   }
+  .gov-bar__links a.needs-org {
+    color: #8c959f;
+    background: #f0f1f2;
+    border-color: #e6e8eb;
+    cursor: not-allowed;
+  }
   .gov-bar__status { color: #57606a; font-size: 13px; }
   .gov-bar__status.error { color: #cf222e; }
   .gov-bar__status.ok    { color: #1a7f37; }
@@ -81,7 +87,7 @@
     <span class="gov-bar__label">🏢 Docker Hub Org:</span>
     <input type="text" id="gov-bar-input" placeholder="e.g. dockerdevrel" autocomplete="off" spellcheck="false" />
     <button id="gov-bar-set">Set org</button>
-    <span class="gov-bar__status" id="gov-bar-status">Optional: pre-set the org for deep-links. You can also click the buttons below now and pick the org inside the console.</span>
+    <span class="gov-bar__status" id="gov-bar-status">Set your org slug to enable the buttons below.</span>
   </div>
   <div class="gov-bar__row" id="gov-bar-summary-row" style="display:none;">
     <span class="gov-bar__label">🏢 Org:</span>
@@ -89,9 +95,9 @@
     <button class="gov-bar__change" id="gov-bar-change">change</button>
   </div>
   <div class="gov-bar__row gov-bar__links">
-    <a id="gov-link-manage"     href="https://app.docker.com/admin" target="_blank" rel="noopener">⚙️  Manage AI governance</a>
-    <a id="gov-link-network"    href="https://app.docker.com/admin" target="_blank" rel="noopener">🛜 Network access</a>
-    <a id="gov-link-filesystem" href="https://app.docker.com/admin" target="_blank" rel="noopener">📂 Filesystem access</a>
+    <a id="gov-link-manage"     href="https://app.docker.com/admin" target="_blank" rel="noopener" class="needs-org">⚙️  Manage AI governance</a>
+    <a id="gov-link-network"    href="https://app.docker.com/admin" target="_blank" rel="noopener" class="needs-org">🛜 Network access</a>
+    <a id="gov-link-filesystem" href="https://app.docker.com/admin" target="_blank" rel="noopener" class="needs-org">📂 Filesystem access</a>
   </div>
 </div>
 
@@ -113,10 +119,13 @@
     network:    $('gov-link-network'),
     filesystem: $('gov-link-filesystem')
   };
-  if (!input || !setBtn) return; // renderer didn't keep the DOM, nothing to wire
+  if (!input || !setBtn) return;
 
+  // The Admin Console deep-link pattern:
+  //   https://app.docker.com/accounts/<org>/admin/ai-governance/<sub>
+  // where <sub> is one of: manage, network-access, filesystem-access.
   function urlFor(org, sub) {
-    return 'https://app.docker.com/admin/' + encodeURIComponent(org) + '/ai-governance/' + sub;
+    return 'https://app.docker.com/accounts/' + encodeURIComponent(org) + '/admin/ai-governance/' + sub;
   }
 
   function activate(org) {
@@ -126,19 +135,38 @@
     links.manage.href     = urlFor(org, 'manage');
     links.network.href    = urlFor(org, 'network-access');
     links.filesystem.href = urlFor(org, 'filesystem-access');
-    Object.keys(links).forEach(function (k) { links[k].classList.add('is-deep-link'); });
+    Object.keys(links).forEach(function (k) {
+      links[k].classList.add('is-deep-link');
+      links[k].classList.remove('needs-org');
+    });
   }
 
   function deactivate() {
     inputRow.style.display = 'flex';
     summaryRow.style.display = 'none';
     status.className = 'gov-bar__status';
-    status.textContent = 'Optional: pre-set the org for deep-links. You can also click the buttons below now and pick the org inside the console.';
+    status.textContent = 'Set your org slug to enable the buttons below.';
     Object.keys(links).forEach(function (k) {
       links[k].href = 'https://app.docker.com/admin';
       links[k].classList.remove('is-deep-link');
+      links[k].classList.add('needs-org');
     });
   }
+
+  // Block clicks on the deep-link buttons while no org is set, and nudge
+  // the user back to the input. Without this, the buttons would all
+  // bounce to /admin and look like the chapter is broken.
+  function guardClick(a) {
+    a.addEventListener('click', function (e) {
+      if (a.classList.contains('needs-org')) {
+        e.preventDefault();
+        status.className = 'gov-bar__status error';
+        status.textContent = 'Set your Docker Hub org slug first \u2014 then the buttons will deep-link into the right page.';
+        input.focus();
+      }
+    });
+  }
+  Object.keys(links).forEach(function (k) { guardClick(links[k]); });
 
   function commit() {
     var org = (input.value || '').trim().toLowerCase();
@@ -172,6 +200,8 @@
   if (saved && SLUG_RE.test(saved)) {
     input.value = saved;
     activate(saved);
+  } else {
+    deactivate();
   }
 })();
 </script>
@@ -197,14 +227,15 @@ rule go **inactive** because corporate policy doesn't delegate it,
 then turn on delegation and watch the same rule come back **active** —
 while the org-level deny still blocks the things it's meant to block.
 
-> **About the buttons at the top**
+> **Before you start — set your Docker Hub Org**
 >
-> The three buttons (⚙️ Manage, 🛜 Network access, 📂 Filesystem
-> access) work right now — they take you to the Admin Console and
-> the org switcher in the top-left handles the rest. If you want
-> them to deep-link straight into a specific org's pages, type the
-> org slug into the **Docker Hub Org** input and click **Set org**.
-> The slug is saved in your browser so you only set it once.
+> The three buttons at the top of this chapter (⚙️ Manage AI
+> governance, 🛜 Network access, 📂 Filesystem access) deep-link
+> straight into your org's pages — but only once you've told them
+> which org. Type your slug into the **Docker Hub Org** input and
+> click **Set org**. The slug is saved in your browser so you only
+> set it once. Until then the buttons are inert; clicking one
+> nudges you back to the input.
 
 > **Note**
 >
@@ -227,16 +258,15 @@ while the org-level deny still blocks the things it's meant to block.
 > **Tip — two terminals at once**
 >
 > This chapter has you bouncing between the host shell and the
-> sandbox shell. If you'd rather see both at the same time, split
-> the terminal pane:
+> sandbox shell. The labspace ships with two tmux windows by
+> default — look for the `host` and `sandbox` tabs at the bottom
+> of the terminal pane and switch between them with
+> <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>0</kbd> / <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>1</kbd>.
 >
-> - **tmux split** — inside the terminal, press <kbd>Ctrl</kbd>+<kbd>b</kbd>
->   then <kbd>"</kbd> for a horizontal split (or <kbd>%</kbd> for
->   vertical). Switch panes with <kbd>Ctrl</kbd>+<kbd>b</kbd>
->   <kbd>o</kbd>.
-> - **Two windows** — if the labspace was started with the multi-terminal
->   patch, the bottom of the terminal shows two tabs: `host` and `sandbox`.
->   Switch with <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>0</kbd> / <kbd>1</kbd>.
+> If you don't see the tabs (older `start-labspace.sh`, or `tmux`
+> isn't installed locally), you can still split the current pane:
+> <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>"</kbd> for a horizontal split,
+> or <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>%</kbd> for vertical.
 
 ---
 
@@ -288,9 +318,9 @@ sbx policy rm network --resource api.example.com
 
 Either may return `rule not found` — that's fine.
 
-🌐 **Admin Console** — click **⚙️ Manage AI governance** in the bar
-at the top of this page. Keep the Admin Console tab open; you'll
-bounce between it and the terminal throughout the chapter.
+🌐 **Admin Console** — click **⚙️ Manage AI governance** at the
+top of this page. Keep the Admin Console tab open; you'll bounce
+between it and the terminal throughout the chapter.
 
 ---
 
@@ -301,7 +331,7 @@ flipped, the **Network access** and **Filesystem access** pages
 render with a banner reading *"Turn on AI governance to control
 network access"* and the **Add rule** button is disabled.
 
-🌐 **Admin Console** → **⚙️ Manage AI governance** (top bar):
+🌐 **Admin Console** → click **⚙️ Manage AI governance** (top bar):
 
 1. Toggle **AI governance** on.
 2. Three sub-pages become functional:
@@ -326,7 +356,7 @@ network access"* and the **Add rule** button is disabled.
 The headline behavior to demonstrate: **a local allow rule is
 inactive when org policy is on and the rule type isn't delegated.**
 
-🌐 **Admin Console** → click **🛜 Network access** in the top bar
+🌐 **Admin Console** → click **🛜 Network access** (top bar)
 → **Add rule**:
 
 | Field | Value |
@@ -451,9 +481,9 @@ Delegation is the escape valve: the admin can hand a rule type back
 to local control, with two guardrails — **local rules can only
 *expand* access, and overly-broad patterns are rejected.**
 
-🌐 **Admin Console** → **🛜 Network access** (top bar) → toggle
-**User defined** on. (The hint copy reads *"Let users extend the
-policy within set limits."*)
+🌐 **Admin Console** → click **🛜 Network access** (top bar) →
+toggle **User defined** on. (The hint copy reads *"Let users
+extend the policy within set limits."*)
 
 🖥 **Host**:
 
@@ -541,8 +571,8 @@ directory the user has access to — fine for an individual, a problem
 when sensitive directories like `~/.ssh` and `~/.aws` exist on every
 developer's laptop.
 
-🌐 **Admin Console** → click **📂 Filesystem access** in the top bar
-→ add these rules:
+🌐 **Admin Console** → click **📂 Filesystem access** (top bar) →
+add these rules:
 
 | Name | Path | Action |
 |---|---|---|
