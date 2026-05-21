@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Opening Docker Admin Console…</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; margin: 0; background: #f6f8fa; color: #1f2328;
+    }
+    .card {
+      max-width: 520px; padding: 32px; border: 1px solid #d0d7de;
+      border-radius: 12px; background: #ffffff; text-align: center;
+    }
+    h1 { font-size: 18px; margin: 0 0 12px 0; }
+    p  { font-size: 14px; color: #57606a; margin: 8px 0; line-height: 1.5; }
+    a  { color: #1f6feb; word-break: break-all; }
+    .err { color: #cf222e; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Opening Docker Admin Console…</h1>
+    <p id="msg">Redirecting you to the right page.</p>
+    <p>If nothing happens, <a id="fallback" href="https://app.docker.com/admin">click here</a>.</p>
+  </div>
+  <script>
+    // Redirect helper for the Labspace governance chapter quick-jump form.
+    // Reads ?org=<slug>&page=<manage|network-access|filesystem-access>
+    // and redirects to the matching Admin Console page.
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var org = (params.get('org') || '').trim().toLowerCase();
+      var page = (params.get('page') || '').trim().toLowerCase();
+      var msg = document.getElementById('msg');
+      var fallback = document.getElementById('fallback');
+
+      var ALLOWED_PAGES = ['manage', 'network-access', 'filesystem-access'];
+      var SLUG_RE = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+
+      if (!SLUG_RE.test(org)) {
+        msg.className = 'err';
+        msg.textContent = 'Missing or invalid org slug. Go back and type your Docker Hub org name.';
+        return;
+      }
+      if (ALLOWED_PAGES.indexOf(page) === -1) {
+        msg.className = 'err';
+        msg.textContent = 'Unknown page. Pick one of the buttons in the chapter.';
+        return;
+      }
+
+      var target = 'https://app.docker.com/accounts/' +
+                   encodeURIComponent(org) +
+                   '/admin/ai-governance/' + page;
+      fallback.href = target;
+      msg.textContent = 'Opening ' + target;
+      window.location.replace(target);
+    })();
+  </script>
+</body>
+</html>

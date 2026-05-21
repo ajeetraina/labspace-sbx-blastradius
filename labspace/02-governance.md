@@ -1,10 +1,59 @@
 <!--
-  Quick links to the AI governance Admin Console pages.
-  URLs are baked in at chapter-write time by add-governance-chapter.sh.
-  To regenerate for a different org, re-run with --org <slug>.
--->
+  Quick-jump form: attendee types their Docker Hub org once, clicks one
+  of the three buttons, and the browser submits to a small redirect
+  helper page (docs/go.html in this repo, served via GitHub Pages) which
+  in turn redirects to the right Admin Console URL.
 
-**🌐 Quick links** &nbsp; &middot; &nbsp; [⚙️ Manage AI governance](https://app.docker.com/accounts/dockerdevrel/admin/ai-governance/manage) &nbsp; &middot; &nbsp; [🛜 Network access](https://app.docker.com/accounts/dockerdevrel/admin/ai-governance/network-access) &nbsp; &middot; &nbsp; [📂 Filesystem access](https://app.docker.com/accounts/dockerdevrel/admin/ai-governance/filesystem-access)
+  Why a form, not JS: the labspace markdown renderer strips inline
+  <script> tags as an XSS defense. <form>, <input> and <button> render
+  fine. The redirect helper lives outside the markdown renderer, so its
+  JS runs normally.
+
+  GitHub Pages must be enabled on this repo (Settings → Pages → main
+  branch → /docs folder). The script that generates this chapter prints
+  setup instructions on first run.
+-->
+<style>
+  .gov-bar {
+    border: 1px solid #d0d7de; border-radius: 8px;
+    padding: 14px 18px; margin: 0 0 24px 0;
+    background: #f6f8fa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .gov-bar form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+  .gov-bar label { font-weight: 600; color: #1f2328; margin-right: 4px; font-size: 14px; }
+  .gov-bar input[type="text"] {
+    padding: 5px 10px; border: 1px solid #d0d7de; border-radius: 6px;
+    font-size: 14px; min-width: 200px; font-family: inherit;
+  }
+  .gov-bar input[type="text"]:invalid { border-color: #cf222e; }
+  .gov-bar button {
+    padding: 5px 12px; border: 1px solid #d0d7de; border-radius: 6px;
+    background: #ffffff; color: #1f6feb; font-size: 14px; cursor: pointer;
+    font-family: inherit; font-weight: 500;
+  }
+  .gov-bar button:hover { background: #eaf2ff; border-color: #b6daff; }
+  .gov-bar__hint { color: #57606a; font-size: 13px; margin-top: 8px; }
+</style>
+
+<div class="gov-bar">
+  <form action="https://ajeetraina.github.io/labspace-sbx-blastradius/go.html" method="get" target="_blank">
+    <label for="gov-org">🏢 Docker Hub Org:</label>
+    <input
+      type="text" id="gov-org" name="org"
+      placeholder="e.g. dockerdevrel" required
+      autocomplete="off" spellcheck="false"
+      pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]"
+      title="3–40 chars, lowercase letters / digits / hyphens, no leading or trailing hyphen"
+    />
+    <button type="submit" name="page" value="manage">⚙️  Manage AI governance</button>
+    <button type="submit" name="page" value="network-access">🛜 Network access</button>
+    <button type="submit" name="page" value="filesystem-access">📂 Filesystem access</button>
+  </form>
+  <div class="gov-bar__hint">
+    Type your Docker Hub org slug once, then click whichever page you need. Opens in a new tab.
+  </div>
+</div>
 
 
 # Organization Governance
@@ -28,14 +77,13 @@ rule go **inactive** because corporate policy doesn't delegate it,
 then turn on delegation and watch the same rule come back **active** —
 while the org-level deny still blocks the things it's meant to block.
 
-> **About the quick links at the top**
+> **Use the form above first**
 >
-> The three links above (⚙️ Manage AI governance, 🛜 Network
-> access, 📂 Filesystem access) open straight to your org's pages
-> in the Admin Console. They're baked into this chapter at
-> build-time — if you're looking at someone else's clone and the
-> org isn't yours, regenerate the chapter with
-> `./add-governance-chapter.sh --org YOUR-ORG`.
+> Type your Docker Hub org slug into the input at the top of this
+> chapter, then click ⚙️ Manage AI governance to open your org's
+> Admin Console page in a new tab. The same input drives the
+> 🛜 Network access and 📂 Filesystem access buttons — type once,
+> click whichever page you need. Each opens in its own tab.
 
 > **Note**
 >
