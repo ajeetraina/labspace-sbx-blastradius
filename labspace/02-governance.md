@@ -1,60 +1,93 @@
 <!--
-  Quick-jump form: attendee types their Docker Hub org once, clicks one
-  of the three buttons, and the browser submits to a small redirect
-  helper page (docs/go.html in this repo, served via GitHub Pages) which
-  in turn redirects to the right Admin Console URL.
+  Three-step stepper at the top of the chapter, matching the actual
+  Admin Console workflow:
 
-  Why a form, not JS: the labspace markdown renderer strips inline
-  <script> tags as an XSS defense. <form>, <input> and <button> render
-  fine. The redirect helper lives outside the markdown renderer, so its
-  JS runs normally.
+    Step 1 → enable AI governance (the master toggle)
+    Step 2 → configure Filesystem access rules
+    Step 3 → configure Network access rules
 
-  GitHub Pages must be enabled on this repo (Settings → Pages → main
-  branch → /docs folder). The script that generates this chapter prints
-  setup instructions on first run.
+  Each step's button opens the Docker Admin Console in a new tab; the
+  attendee's session there determines the org automatically (no need
+  to template URLs for each attendee, no JS, no form, no helper page).
+  Step prose tells them which sidebar item to click once they land.
+
+  Why this design: the labspace markdown renderer strips inline
+  <script> tags as an XSS defense, so anything interactive needs to
+  be plain HTML. Plain anchor links + visual stepping == bulletproof.
 -->
 <style>
-  .gov-bar {
-    border: 1px solid #d0d7de; border-radius: 8px;
-    padding: 14px 18px; margin: 0 0 24px 0;
-    background: #f6f8fa;
+  .gov-steps {
+    margin: 0 0 24px 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
-  .gov-bar form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
-  .gov-bar label { font-weight: 600; color: #1f2328; margin-right: 4px; font-size: 14px; }
-  .gov-bar input[type="text"] {
-    padding: 5px 10px; border: 1px solid #d0d7de; border-radius: 6px;
-    font-size: 14px; min-width: 200px; font-family: inherit;
+  .gov-step {
+    display: flex; align-items: flex-start; gap: 14px;
+    border: 1px solid #d0d7de; border-radius: 8px;
+    padding: 14px 18px; margin: 0 0 10px 0;
+    background: #ffffff;
   }
-  .gov-bar input[type="text"]:invalid { border-color: #cf222e; }
-  .gov-bar button {
-    padding: 5px 12px; border: 1px solid #d0d7de; border-radius: 6px;
-    background: #ffffff; color: #1f6feb; font-size: 14px; cursor: pointer;
-    font-family: inherit; font-weight: 500;
+  .gov-step__num {
+    flex-shrink: 0;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: #1f6feb; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 14px;
   }
-  .gov-bar button:hover { background: #eaf2ff; border-color: #b6daff; }
-  .gov-bar__hint { color: #57606a; font-size: 13px; margin-top: 8px; }
+  .gov-step__body { flex: 1; min-width: 0; }
+  .gov-step__title { font-weight: 600; color: #1f2328; font-size: 15px; margin: 4px 0 4px 0; }
+  .gov-step__desc { color: #57606a; font-size: 13px; line-height: 1.5; margin: 0 0 10px 0; }
+  .gov-step__desc strong { color: #1f2328; }
+  .gov-step__btn {
+    display: inline-block;
+    padding: 6px 14px;
+    border: 1px solid #1f6feb;
+    background: #1f6feb;
+    color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .gov-step__btn:hover { background: #1a5fd1; }
 </style>
 
-<div class="gov-bar">
-  <form action="https://ajeetraina.github.io/labspace-sbx-blastradius/go.html" method="get" target="_blank">
-    <label for="gov-org">🏢 Docker Hub Org:</label>
-    <input
-      type="text" id="gov-org" name="org"
-      placeholder="e.g. dockerdevrel" required
-      autocomplete="off" spellcheck="false"
-      pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]"
-      title="3–40 chars, lowercase letters / digits / hyphens, no leading or trailing hyphen"
-    />
-    <button type="submit" name="page" value="manage">⚙️  Manage AI governance</button>
-    <button type="submit" name="page" value="network-access">🛜 Network access</button>
-    <button type="submit" name="page" value="filesystem-access">📂 Filesystem access</button>
-  </form>
-  <div class="gov-bar__hint">
-    Type your Docker Hub org slug once, then click whichever page you need. Opens in a new tab.
-  </div>
-</div>
+<div class="gov-steps">
 
+  <div class="gov-step">
+    <div class="gov-step__num">1</div>
+    <div class="gov-step__body">
+      <div class="gov-step__title">Enable AI Governance</div>
+      <div class="gov-step__desc">
+        Open the Admin Console, then in the left sidebar go to <strong>AI governance → Manage</strong> and toggle <strong>AI governance</strong> on. This is the master switch — until it's on, the Filesystem and Network pages refuse to accept rules.
+      </div>
+      <a class="gov-step__btn" href="https://app.docker.com/admin" target="_blank" rel="noopener">⚙️ Open Admin Console</a>
+    </div>
+  </div>
+
+  <div class="gov-step">
+    <div class="gov-step__num">2</div>
+    <div class="gov-step__body">
+      <div class="gov-step__title">Configure Filesystem access</div>
+      <div class="gov-step__desc">
+        In the same Admin Console tab, go to <strong>AI governance → Filesystem access</strong>. Add allow / deny rules for which host paths sandboxes can mount. We'll walk through example rules in Step 6 below.
+      </div>
+      <a class="gov-step__btn" href="https://app.docker.com/admin" target="_blank" rel="noopener">📂 Open Admin Console</a>
+    </div>
+  </div>
+
+  <div class="gov-step">
+    <div class="gov-step__num">3</div>
+    <div class="gov-step__body">
+      <div class="gov-step__title">Configure Network access</div>
+      <div class="gov-step__desc">
+        In the same Admin Console tab, go to <strong>AI governance → Network access</strong>. Add allow / deny rules for which domains sandboxes can reach. We'll walk through example rules in Step 2–5 below.
+      </div>
+      <a class="gov-step__btn" href="https://app.docker.com/admin" target="_blank" rel="noopener">🛜 Open Admin Console</a>
+    </div>
+  </div>
+
+</div>
 
 # Organization Governance
 
@@ -77,13 +110,13 @@ rule go **inactive** because corporate policy doesn't delegate it,
 then turn on delegation and watch the same rule come back **active** —
 while the org-level deny still blocks the things it's meant to block.
 
-> **Use the form above first**
+> **Use the steps above first**
 >
-> Type your Docker Hub org slug into the input at the top of this
-> chapter, then click ⚙️ Manage AI governance to open your org's
-> Admin Console page in a new tab. The same input drives the
-> 🛜 Network access and 📂 Filesystem access buttons — type once,
-> click whichever page you need. Each opens in its own tab.
+> The three numbered steps at the top of this chapter walk you
+> through the workflow: enable AI governance, configure filesystem
+> access, configure network access. Each step's button opens the
+> Admin Console in a new tab — the chapter prose below walks you
+> through what to fill in once you're there.
 
 > **Note**
 >
@@ -179,7 +212,8 @@ flipped, the **Network access** and **Filesystem access** pages
 render with a banner reading *"Turn on AI governance to control
 network access"* and the **Add rule** button is disabled.
 
-🌐 **Admin Console** → click **⚙️ Manage AI governance** (top bar):
+🌐 **Admin Console** → use **Step 1** above, or in the left sidebar
+go to **AI governance → Manage**:
 
 1. Toggle **AI governance** on.
 2. Three sub-pages become functional:
@@ -204,8 +238,8 @@ network access"* and the **Add rule** button is disabled.
 The headline behavior to demonstrate: **a local allow rule is
 inactive when org policy is on and the rule type isn't delegated.**
 
-🌐 **Admin Console** → click **🛜 Network access** (top bar)
-→ **Add rule**:
+🌐 **Admin Console** → use **Step 3** above, or in the left sidebar
+go to **AI governance → Network access** → **Add rule**:
 
 | Field | Value |
 |---|---|
@@ -329,7 +363,7 @@ Delegation is the escape valve: the admin can hand a rule type back
 to local control, with two guardrails — **local rules can only
 *expand* access, and overly-broad patterns are rejected.**
 
-🌐 **Admin Console** → click **🛜 Network access** (top bar) →
+🌐 **Admin Console** → **AI governance → Network access** →
 toggle **User defined** on. (The hint copy reads *"Let users
 extend the policy within set limits."*)
 
@@ -419,8 +453,8 @@ directory the user has access to — fine for an individual, a problem
 when sensitive directories like `~/.ssh` and `~/.aws` exist on every
 developer's laptop.
 
-🌐 **Admin Console** → click **📂 Filesystem access** (top bar) →
-add these rules:
+🌐 **Admin Console** → use **Step 2** above, or in the left sidebar
+go to **AI governance → Filesystem access** → add these rules:
 
 | Name | Path | Action |
 |---|---|---|
